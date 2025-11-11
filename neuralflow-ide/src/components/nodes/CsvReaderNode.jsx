@@ -1,7 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import { Handle, Position, useStore, useReactFlow } from 'reactflow';
 import './CsvReaderNode.css';
-import { parseTabularFile } from '../../utils/parseTabularFile';
+import { uploadFile } from '../../utils/apiClient';
 // We'll remove the icon for this simpler design or keep it subtle
 // import { FaTable } from 'react-icons/fa';
 
@@ -25,44 +25,45 @@ function CsvReaderNode({ id, data }) {
     });
   });
 
-  const onPickFile = () => {
+  const onPickFile = useCallback(() => {
     setError('');
     if (inputRef.current) inputRef.current.click();
-  };
+  }, []);
 
-  const onFileChange = async (e) => {
+  const onFileChange = useCallback(async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     setSelectedFile(file);
     setIsLoading(true);
     setError('');
     try {
-      const parsed = await parseTabularFile(file);
-      setSample(parsed);
-      // persist headers and file on the node data so downstream nodes can use it
+      // 2GB guard is enforced in apiClient and backend
+      const resp = await uploadFile(file);
+      setSample({ headers: resp.headers, rows: resp.sample });
+      // Persist a backend fileId for downstream nodes
       setNodes((nds) => nds.map((n) => {
         if (n.id !== id) return n;
-        return { ...n, data: { ...n.data, headers: parsed.headers, file } };
+        return { ...n, data: { ...n.data, headers: resp.headers, fileId: resp.fileId, fileName: file.name } };
       }));
     } catch (err) {
       setError(err?.message || 'Failed to parse file');
       setSelectedFile(null);
       setSample({ headers: [], rows: [] });
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, headers: [], file: undefined } } : n)));
+      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, headers: [], fileId: undefined } } : n)));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, setNodes]);
 
-  const onDeleteFile = () => {
+  const onDeleteFile = useCallback(() => {
     setSelectedFile(null);
     setSample({ headers: [], rows: [] });
     setError('');
     if (inputRef.current) {
       inputRef.current.value = '';
     }
-    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, headers: [], file: undefined } } : n)));
-  };
+    setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, headers: [], fileId: undefined } } : n)));
+  }, [id, setNodes]);
 
   return (
     <div className="csv-reader-node minimal">

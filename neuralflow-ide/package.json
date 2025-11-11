@@ -11,7 +11,10 @@
     "dev:electron": "npm run electron:dev",
     "electron:dev": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:start": "electron .",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "backend": "uvicorn python-backend.main:app --host 127.0.0.1 --port 8000",
+    "dev:full": "concurrently -k \"npm:backend\" \"vite\"",
+    "electron:full": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 concurrently -k \"npm:backend\" \"vite\" \"wait-on http://localhost:5173 && electron .\""
   },
   "main": "electron/main.js",
   "dependencies": {

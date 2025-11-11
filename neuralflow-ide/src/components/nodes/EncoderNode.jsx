@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Handle, Position, useStore, useReactFlow } from 'reactflow';
 import './EncoderNode.css';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
-import { encodeDataset } from '../../utils/encodingUtils';
+import { encodeData, getFull } from '../../utils/apiClient';
 
 const EncoderNode = ({ id, data, isConnectable }) => {
   const [selectedColumns, setSelectedColumns] = useState([]);
@@ -21,7 +20,7 @@ const EncoderNode = ({ id, data, isConnectable }) => {
         return { 
           type: 'csv', 
           headers: src.data?.headers || [], 
-          file: src.data?.file 
+          fileId: src.data?.fileId 
         };
       }
       if (src?.type === 'encoder') {
@@ -46,15 +45,11 @@ const EncoderNode = ({ id, data, isConnectable }) => {
 
   const headers = useMemo(() => upstreamData?.headers || [], [upstreamData]);
 
-  const toggleColumn = (header) => {
-    setSelectedColumns(prev => 
-      prev.includes(header) 
-        ? prev.filter(col => col !== header)
-        : [...prev, header]
-    );
-  };
+  const toggleColumn = useCallback((header) => {
+    setSelectedColumns(prev => (prev.includes(header) ? prev.filter(col => col !== header) : [...prev, header]));
+  }, []);
 
-  const onEncode = async () => {
+  const onEncode = useCallback(async () => {
     if (!upstreamData) {
       setError('Please connect a CSV/Excel node, Encoder node, or Normalizer node.');
       return;
@@ -68,37 +63,15 @@ const EncoderNode = ({ id, data, isConnectable }) => {
     setError('');
 
     try {
-      let rows;
-      
-      if (upstreamData.type === 'csv') {
-        // Parse from CSV file
-        const parsed = await parseFullTabularFile(upstreamData.file);
-        rows = parsed.rows;
-      } else if (upstreamData.type === 'encoded') {
-        // Use pre-encoded data
-        rows = upstreamData.encodedRows;
-      } else if (upstreamData.type === 'normalized') {
-        // Use pre-normalized data
-        rows = upstreamData.normalizedRows;
-      } else {
-        throw new Error('Unknown data source type.');
+      if (upstreamData.type !== 'csv') {
+        throw new Error('Please connect a CSV/Excel node (backend-backed).');
       }
-      
-      // Create encoding configuration
-      const encodingConfig = {};
-      selectedColumns.forEach(col => {
-        encodingConfig[col] = { type: encodingType };
-      });
-
-      // Apply encoding
-      const result = encodeDataset(rows, headers, encodingConfig);
-      
-      // Get first 5 rows for preview
-      const previewRows = result.encodedRows.slice(0, 5);
+      const result = await encodeData({ fileId: upstreamData.fileId, columns: selectedColumns, encodingType });
+      const previewRows = result.rows.slice(0, 5);
       
       setEncodedData({
         headers: result.headers,
-        rows: result.encodedRows,
+        rows: result.rows,
         previewRows,
         encodingInfo: result.encodingInfo
       });
@@ -111,7 +84,7 @@ const EncoderNode = ({ id, data, isConnectable }) => {
           data: { 
             ...n.data, 
             headers: result.headers,
-            encodedRows: result.encodedRows,
+            encodedRows: result.rows,
             encodingInfo: result.encodingInfo,
             originalData: upstreamData
           } 
@@ -123,16 +96,16 @@ const EncoderNode = ({ id, data, isConnectable }) => {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [headers, id, selectedColumns, encodingType, setNodes, upstreamData]);
 
-  const onClear = () => {
+  const onClear = useCallback(() => {
     setEncodedData(null);
     setSelectedColumns([]);
     setError('');
     setNodes((nds) => nds.map((n) => 
       n.id === id ? { ...n, data: { ...n.data, headers: [], encodedRows: [], encodingInfo: {}, originalData: null } } : n
     ));
-  };
+  }, [id, setNodes]);
 
   return (
     <div className="encoder-node">
@@ -225,6 +198,6 @@ const EncoderNode = ({ id, data, isConnectable }) => {
   );
 };
 
-export default EncoderNode;
+export default memo(EncoderNode);
 
 

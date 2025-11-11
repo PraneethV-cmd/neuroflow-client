@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import './BottomToolbar.css';
 import { MdAdd, MdRemove, MdZoomOutMap, MdUndo, MdRedo } from 'react-icons/md';
 
@@ -35,4 +35,4 @@ const BottomToolbar = ({ zoomIn, zoomOut, fitView, zoomLevel }) => {
   );
 };
 
-export default BottomToolbar;
+export default memo(BottomToolbar);
