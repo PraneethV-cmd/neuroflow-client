@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import './TopToolbar.css';
 import {
-  MdMenu, MdOutlineMouse, MdOutlinePanTool, MdOutlineShare, MdOutlineLibraryBooks
+  MdMenu, MdOutlineMouse, MdOutlinePanTool
 } from 'react-icons/md';
 
 // Component now accepts props to manage tool state
@@ -37,20 +37,8 @@ const TopToolbar = ({ activeTool, setActiveTool, onMenuClick }) => {
           </button>
         </div>
       </div>
-
-      {/* Share and Library in separate oval */}
-      <div className="actions-toolbar">
-        <button className="action-button">
-          <MdOutlineShare />
-          <span>Share</span>
-        </button>
-        <button className="action-button">
-          <MdOutlineLibraryBooks />
-          <span>Library</span>
-        </button>
-      </div>
     </div>
   );
 };
 
-export default TopToolbar;
+export default memo(TopToolbar);

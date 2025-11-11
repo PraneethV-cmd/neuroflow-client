@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Handle, Position, useStore, useReactFlow } from 'reactflow';
 import './LinearRegressionNode.css';
 import { FaChartLine, FaCog } from 'react-icons/fa';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
+import { trainLinear } from '../../utils/apiClient';
 
 const LinearRegressionNode = ({ id, data, isConnectable }) => {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -26,9 +26,9 @@ const LinearRegressionNode = ({ id, data, isConnectable }) => {
       const src = store.nodeInternals.get(e.source);
       if (src?.type === 'csvReader') {
         return { 
-          type: 'csv', 
-          headers: src.data?.headers || [], 
-          file: src.data?.file 
+          type: 'csv',
+          headers: src.data?.headers || [],
+          fileId: src.data?.fileId
         };
       }
       if (src?.type === 'encoder') {
@@ -53,11 +53,11 @@ const LinearRegressionNode = ({ id, data, isConnectable }) => {
 
   const headers = useMemo(() => upstreamData?.headers || [], [upstreamData]);
 
-  const toggleConfig = () => {
-    setIsConfigOpen(!isConfigOpen);
-  };
+  const toggleConfig = useCallback(() => {
+    setIsConfigOpen((v) => !v);
+  }, []);
 
-  const onRun = async () => {
+  const onRun = useCallback(async () => {
     setTrainMsg('');
     if (!upstreamData) {
       alert('Please connect a CSV/Excel node or Encoder node.');
@@ -69,47 +69,13 @@ const LinearRegressionNode = ({ id, data, isConnectable }) => {
     }
     setIsTraining(true);
     try {
-      let rows;
-      
-      if (upstreamData.type === 'csv') {
-        // Parse from CSV file
-        const parsed = await parseFullTabularFile(upstreamData.file);
-        rows = parsed.rows;
-      } else if (upstreamData.type === 'encoded') {
-        // Use pre-encoded data
-        rows = upstreamData.encodedRows;
-      } else if (upstreamData.type === 'normalized') {
-        // Use pre-normalized data
-        rows = upstreamData.normalizedRows;
-      } else {
-        throw new Error('Unknown data source type.');
+      // Expect upstreamData to contain fileId for backend
+      if (upstreamData.type !== 'csv') {
+        throw new Error('Please connect a CSV/Excel node (backend-backed).');
       }
-
-      const xi = headers.indexOf(xCol);
-      const yi = headers.indexOf(yCol);
-      if (xi === -1 || yi === -1) throw new Error('Selected columns not found.');
-      
-      const X = [];
-      const Y = [];
-      for (const r of rows) {
-        const xv = parseFloat(r[xi]);
-        const yv = parseFloat(r[yi]);
-        if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue;
-        X.push(xv);
-        Y.push(yv);
-      }
-      if (X.length < 2) throw new Error('Not enough numeric rows for training.');
-
-      // Simple linear regression (least squares)
-      const n = X.length;
-      const sumX = X.reduce((a, b) => a + b, 0);
-      const sumY = Y.reduce((a, b) => a + b, 0);
-      const sumXY = X.reduce((acc, x, i) => acc + x * Y[i], 0);
-      const sumXX = X.reduce((acc, x) => acc + x * x, 0);
-      const denom = n * sumXX - sumX * sumX;
-      if (denom === 0) throw new Error('Degenerate data; cannot fit line.');
-      const slope = (n * sumXY - sumX * sumY) / denom;
-      const intercept = (sumY - slope * sumX) / n;
+      const ll = await trainLinear({ fileId: upstreamData.fileId, xCol, yCol });
+      const slope = ll.slope;
+      const intercept = ll.intercept;
 
       setTrainMsg(`Training complete. y = ${slope.toFixed(4)} x + ${intercept.toFixed(4)}`);
       // Persist model info on this node's data for downstream nodes (visualizer)
@@ -123,7 +89,7 @@ const LinearRegressionNode = ({ id, data, isConnectable }) => {
     } finally {
       setIsTraining(false);
     }
-  };
+  }, [headers, id, setNodes, upstreamData, xCol, yCol]);
 
   return (
     <div className="linear-regression-node">
@@ -233,4 +199,4 @@ const LinearRegressionNode = ({ id, data, isConnectable }) => {
   );
 };
 
-export default LinearRegressionNode;
+export default memo(LinearRegressionNode);

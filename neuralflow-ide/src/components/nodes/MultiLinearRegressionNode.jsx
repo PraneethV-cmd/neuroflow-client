@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Handle, Position, useStore, useReactFlow } from 'reactflow';
 import './LinearRegressionNode.css';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
+import { trainMultiLinear } from '../../utils/apiClient';
 import { transpose, multiply, invert } from '../../utils/linearAlgebra';
 
 const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
@@ -19,7 +19,7 @@ const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
         return { 
           type: 'csv', 
           headers: src.data?.headers || [], 
-          file: src.data?.file 
+          fileId: src.data?.fileId 
         };
       }
       if (src?.type === 'encoder') {
@@ -44,11 +44,11 @@ const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
 
   const headers = useMemo(() => upstreamData?.headers || [], [upstreamData]);
 
-  const toggleX = (h) => {
+  const toggleX = useCallback((h) => {
     setSelectedX((prev) => (prev.includes(h) ? prev.filter((c) => c !== h) : [...prev, h]));
-  };
+  }, []);
 
-  const onRun = async () => {
+  const onRun = useCallback(async () => {
     setTrainMsg('');
     if (!upstreamData) {
       alert('Please connect a CSV/Excel node or Encoder node.');
@@ -60,58 +60,12 @@ const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
     }
     setIsTraining(true);
     try {
-      let rows;
-      
-      if (upstreamData.type === 'csv') {
-        // Parse from CSV file
-        const parsed = await parseFullTabularFile(upstreamData.file);
-        rows = parsed.rows;
-      } else if (upstreamData.type === 'encoded') {
-        // Use pre-encoded data
-        rows = upstreamData.encodedRows;
-      } else if (upstreamData.type === 'normalized') {
-        // Use pre-normalized data
-        rows = upstreamData.normalizedRows;
-      } else {
-        throw new Error('Unknown data source type.');
+      if (upstreamData.type !== 'csv') {
+        throw new Error('Please connect a CSV/Excel node (backend-backed).');
       }
-
-      const xIdx = selectedX.map((c) => headers.indexOf(c));
-      const yIdx = headers.indexOf(yCol);
-      if (xIdx.some((i) => i === -1) || yIdx === -1) throw new Error('Selected columns not found.');
-
-      const X = []; // with intercept term
-      const Y = [];
-      for (const r of rows) {
-        const xRow = [1];
-        let valid = true;
-        for (const i of xIdx) {
-          const v = parseFloat(r[i]);
-          if (!Number.isFinite(v)) { valid = false; break; }
-          xRow.push(v);
-        }
-        const yv = parseFloat(r[yIdx]);
-        if (!Number.isFinite(yv)) valid = false;
-        if (!valid) continue;
-        X.push(xRow);
-        Y.push([yv]);
-      }
-      if (X.length < selectedX.length + 1) throw new Error('Not enough valid rows to fit the model.');
-
-      // OLS: beta = (X^T X)^{-1} X^T y
-      const Xt = transpose(X);
-      let XtX = multiply(Xt, X);
-      // Add small ridge regularization on diagonal to avoid singular matrices
-      const lambda = 1e-6;
-      for (let d = 0; d < XtX.length; d++) {
-        XtX[d][d] += lambda;
-      }
-      const XtXInv = invert(XtX);
-      const XtY = multiply(Xt, Y);
-      const Beta = multiply(XtXInv, XtY); // (k+1) x 1
-
-      const intercept = Beta[0][0];
-      const coefficients = Beta.slice(1).map((b) => b[0]);
+      const result = await trainMultiLinear({ fileId: upstreamData.fileId, xCols: selectedX, yCol });
+      const intercept = result.intercept;
+      const coefficients = result.coefficients;
       const parts = coefficients.map((c, i) => `${c.toFixed(4)}*${selectedX[i]}`);
       setTrainMsg(`Done. y = ${intercept.toFixed(4)} + ${parts.join(' + ')}`);
 
@@ -125,7 +79,7 @@ const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
     } finally {
       setIsTraining(false);
     }
-  };
+  }, [headers, id, selectedX, setNodes, upstreamData, yCol]);
 
   return (
     <div className="linear-regression-node">
@@ -169,6 +123,6 @@ const MultiLinearRegressionNode = ({ id, data, isConnectable }) => {
   );
 };
 
-export default MultiLinearRegressionNode;
+export default memo(MultiLinearRegressionNode);
 
 

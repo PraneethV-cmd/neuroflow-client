@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Handle, Position, useStore, useReactFlow } from 'reactflow';
 import './NormalizerNode.css';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
-import { normalizeDataset } from '../../utils/normalizationUtils';
+import { normalizeData } from '../../utils/apiClient';
 
 const NormalizerNode = ({ id, data, isConnectable }) => {
   const [selectedColumns, setSelectedColumns] = useState([]);
@@ -21,7 +20,7 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
         return { 
           type: 'csv', 
           headers: src.data?.headers || [], 
-          file: src.data?.file 
+          fileId: src.data?.fileId 
         };
       }
       if (src?.type === 'encoder') {
@@ -38,15 +37,11 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
 
   const headers = useMemo(() => upstreamData?.headers || [], [upstreamData]);
 
-  const toggleColumn = (header) => {
-    setSelectedColumns(prev => 
-      prev.includes(header) 
-        ? prev.filter(col => col !== header)
-        : [...prev, header]
-    );
-  };
+  const toggleColumn = useCallback((header) => {
+    setSelectedColumns(prev => (prev.includes(header) ? prev.filter(col => col !== header) : [...prev, header]));
+  }, []);
 
-  const onNormalize = async () => {
+  const onNormalize = useCallback(async () => {
     if (!upstreamData) {
       setError('Please connect a CSV/Excel node or Encoder node.');
       return;
@@ -60,34 +55,15 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
     setError('');
 
     try {
-      let rows;
-      
-      if (upstreamData.type === 'csv') {
-        // Parse from CSV file
-        const parsed = await parseFullTabularFile(upstreamData.file);
-        rows = parsed.rows;
-      } else if (upstreamData.type === 'encoded') {
-        // Use pre-encoded data
-        rows = upstreamData.encodedRows;
-      } else {
-        throw new Error('Unknown data source type.');
+      if (upstreamData.type !== 'csv') {
+        throw new Error('Please connect a CSV/Excel node (backend-backed).');
       }
-      
-      // Create normalization configuration
-      const normalizationConfig = {};
-      selectedColumns.forEach(col => {
-        normalizationConfig[col] = { type: normalizationType };
-      });
-
-      // Apply normalization
-      const result = normalizeDataset(rows, headers, normalizationConfig);
-      
-      // Get first 5 rows for preview
-      const previewRows = result.normalizedRows.slice(0, 5);
+      const result = await normalizeData({ fileId: upstreamData.fileId, columns: selectedColumns, normalizationType });
+      const previewRows = result.rows.slice(0, 5);
       
       setNormalizedData({
         headers: result.headers,
-        rows: result.normalizedRows,
+        rows: result.rows,
         previewRows,
         normalizationInfo: result.normalizationInfo
       });
@@ -100,7 +76,7 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
           data: { 
             ...n.data, 
             headers: result.headers,
-            normalizedRows: result.normalizedRows,
+            normalizedRows: result.rows,
             normalizationInfo: result.normalizationInfo,
             originalData: upstreamData
           } 
@@ -112,16 +88,16 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [headers, id, normalizationType, selectedColumns, setNodes, upstreamData]);
 
-  const onClear = () => {
+  const onClear = useCallback(() => {
     setNormalizedData(null);
     setSelectedColumns([]);
     setError('');
     setNodes((nds) => nds.map((n) => 
       n.id === id ? { ...n, data: { ...n.data, headers: [], normalizedRows: [], normalizationInfo: {} } } : n
     ));
-  };
+  }, [id, setNodes]);
 
   return (
     <div className="normalizer-node">
@@ -235,6 +211,6 @@ const NormalizerNode = ({ id, data, isConnectable }) => {
   );
 };
 
-export default NormalizerNode;
+export default memo(NormalizerNode);
 
 

@@ -24,6 +24,7 @@ import ModelVisualizerNode from '../components/nodes/ModelVisualizerNode';
 import EncoderNode from '../components/nodes/EncoderNode';
 import NormalizerNode from '../components/nodes/NormalizerNode';
 import DataVisualizerNode from '../components/nodes/DataVisualizerNode';
+import GenericModelNode from '../components/nodes/GenericModelNode';
 import FloatingEdge from '../components/edges/FloatingEdge';
 import './EditorPage.css';
 
@@ -38,6 +39,7 @@ const nodeTypes = {
   encoder: EncoderNode,
   normalizer: NormalizerNode,
   dataVisualizer: DataVisualizerNode,
+  genericModel: GenericModelNode,
   // Generic/basic nodes for all other sidebar items
   excelReader: BasicNode,
   databaseReader: BasicNode,
@@ -75,7 +77,7 @@ const EditorPage = () => {
     },
   ]);
   const [edges, setEdges] = useState([]);
-  const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const reactFlowInstanceRef = useRef(null);
 
   const [activeTool, setActiveTool] = useState('select');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -96,27 +98,25 @@ const EditorPage = () => {
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
-      const type = event.dataTransfer.getData('application/reactflow');
-      const nodeName = event.dataTransfer.getData('application/reactflow-name');
-      if (typeof type === 'undefined' || !type) return;
-
-      const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      const newNode = { 
-        id: getId(), 
-        type, 
-        position, 
-        data: { 
-          label: nodeName || `New Node`,
-          nodeType: type
-        } 
-      };
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [reactFlowInstance]
-  );
+  const onDrop = useCallback((event) => {
+    event.preventDefault();
+    const type = event.dataTransfer.getData('application/reactflow');
+    const nodeName = event.dataTransfer.getData('application/reactflow-name');
+    if (typeof type === 'undefined' || !type) return;
+    const instance = reactFlowInstanceRef.current;
+    if (!instance) return;
+    const position = instance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const newNode = {
+      id: getId(),
+      type,
+      position,
+      data: {
+        label: nodeName || `New Node`,
+        nodeType: type
+      }
+    };
+    setNodes((nds) => nds.concat(newNode));
+  }, []);
 
   const addDefaultNode = useCallback(() => {
     const newNode = {
@@ -154,7 +154,7 @@ const EditorPage = () => {
             onNodesChange={(changes) => setNodes((nds) => applyNodeChanges(changes, nds))}
             onEdgesChange={(changes) => setEdges((eds) => applyEdgeChanges(changes, eds))}
             onConnect={onConnect}
-            onInit={setReactFlowInstance}
+            onInit={(inst) => { reactFlowInstanceRef.current = inst; }}
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}

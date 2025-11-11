@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { Handle, Position, useStore } from 'reactflow';
 import './ModelVisualizerNode.css';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
+import { getFull } from '../../utils/apiClient';
 
 const width = 400;
 const height = 300;
@@ -142,8 +142,8 @@ function ModelVisualizerNode({ id, data, isConnectable }) {
           result.model = { ...src.data.model, type: src.type };
         }
         // capture csv
-        if (!result.csv && src.type === 'csvReader' && src.data?.file && src.data?.headers) {
-          result.csv = { file: src.data.file, headers: src.data.headers };
+        if (!result.csv && src.type === 'csvReader' && src.data?.fileId && src.data?.headers) {
+          result.csv = { file: src.data.fileId, headers: src.data.headers };
         }
         // continue walking upstream until we found both
         if (!(result.model && result.csv)) {
@@ -171,7 +171,7 @@ function ModelVisualizerNode({ id, data, isConnectable }) {
       const { xCol, yCol, type } = upstream.model;
       if (!xCol || !yCol) return;
       
-      const { headers: hs, rows } = await parseFullTabularFile(file);
+      const { headers: hs, rows } = await getFull(file);
       const xi = hs.indexOf(xCol);
       const yi = hs.indexOf(yCol);
       if (xi === -1 || yi === -1) return;
@@ -391,6 +391,6 @@ function ModelVisualizerNode({ id, data, isConnectable }) {
   );
 }
 
-export default ModelVisualizerNode;
+export default memo(ModelVisualizerNode);
 
 

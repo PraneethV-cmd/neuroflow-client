@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, memo } from 'react';
 import { Handle, Position, useStore } from 'reactflow';
 import './DataVisualizerNode.css';
-import { parseFullTabularFile } from '../../utils/parseTabularFile';
+import { getFull } from '../../utils/apiClient';
 
 const width = 400;
 const height = 300;
@@ -195,8 +195,8 @@ function DataVisualizerNode({ id, data, isConnectable }) {
     const incoming = Array.from(store.edges.values()).filter((e) => e.target === id);
     for (const e of incoming) {
       const src = store.nodeInternals.get(e.source);
-      if (src?.type === 'csvReader' && src.data?.file && src.data?.headers) {
-        return { headers: src.data.headers, file: src.data.file };
+      if (src?.type === 'csvReader' && src.data?.fileId && src.data?.headers) {
+        return { headers: src.data.headers, file: src.data.fileId };
       }
     }
     return null;
@@ -216,7 +216,7 @@ function DataVisualizerNode({ id, data, isConnectable }) {
     async function loadData() {
       if (!upstreamCsv?.file) return;
       
-      const { headers, rows } = await parseFullTabularFile(upstreamCsv.file);
+      const { headers, rows } = await getFull(upstreamCsv.file);
       if (!cancelled) {
         setVizData({ rows, headers, scatterPoints: [], histogramBins: [], barCategories: [], barValues: [] });
       }
@@ -402,4 +402,4 @@ function DataVisualizerNode({ id, data, isConnectable }) {
   );
 }
 
-export default DataVisualizerNode;
+export default memo(DataVisualizerNode);
